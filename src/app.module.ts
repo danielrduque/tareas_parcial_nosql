@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import { RedisModule } from './redis/redis.module'; // 👈 Importa el nuevo módulo
 import { AuthModule } from './auth/auth.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
+import { TareasModule } from './tareas/tareas.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     RedisModule, // 👈 Nuestro módulo de Redis que funcionará globalmente
     AuthModule,
     UsuariosModule,
+    TareasModule,
   ],
   controllers: [AppController],
   providers: [AppService],
