@@ -15,6 +15,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { RegistroAuthDto } from './dto/registro-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
+import { RateLimitGuard } from './guards/rate-limit.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -26,6 +27,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @UseGuards(RateLimitGuard)
   login(@Body(ValidationPipe) loginAuthDto: LoginAuthDto) {
     return this.authService.login(loginAuthDto);
   }

@@ -10,6 +10,13 @@ export enum TaskStatus {
   COMPLETADA = 'Completada',
 }
 
+// 👇 1. Añadimos un nuevo enum para las prioridades
+export enum TaskPriority {
+  BAJA = 'Baja',
+  MEDIA = 'Media',
+  ALTA = 'Alta',
+}
+
 @Schema({ timestamps: true }) // Agrega createdAt y updatedAt automáticamente
 export class Tarea extends Document {
   @Prop({ required: true, trim: true })
@@ -24,6 +31,17 @@ export class Tarea extends Document {
     default: TaskStatus.PENDIENTE,
   })
   estado: TaskStatus;
+
+  // 👇 2. Añadimos el campo 'prioridad'
+  @Prop({
+    enum: Object.values(TaskPriority),
+    default: TaskPriority.MEDIA, // Por defecto, las tareas tendrán prioridad media
+  })
+  prioridad: TaskPriority;
+
+  // 👇 3. Añadimos el campo 'fechaVencimiento'
+  @Prop({ type: Date, default: null }) // Por defecto no hay fecha de vencimiento
+  fechaVencimiento: Date;
 
   // Relación con el usuario propietario de la tarea
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Usuario', required: true })

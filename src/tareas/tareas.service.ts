@@ -43,6 +43,74 @@ export class TareasService {
     return tarea;
   }
 
+  async obtenerReporteActividadPorUsuario(): Promise<any> {
+    return this.tareaModelo.aggregate([
+      // 1. Agrupar tareas por propietario y contar cuántas hay por estado
+      {
+        $group: {
+          _id: '$propietario',
+          tareasPorEstado: {
+            $push: {
+              k: '$estado',
+              v: 1,
+            },
+          },
+        },
+      },
+      // 2. Reestructurar el conteo por estado
+      {
+        $project: {
+          tareasPorEstado: {
+            $arrayToObject: {
+              $map: {
+                input: { $setUnion: ['$tareasPorEstado.k'] },
+                as: 'estado',
+                in: {
+                  k: '$$estado',
+                  v: {
+                    $size: {
+                      $filter: {
+                        input: '$tareasPorEstado',
+                        as: 'item',
+                        cond: { $eq: ['$$item.k', '$$estado'] },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          totalTareas: {
+            $sum: { $map: { input: '$tareasPorEstado', as: 't', in: '$$t.v' } },
+          },
+        },
+      },
+      // 3. Unir con la colección de usuarios para obtener el nombre y email
+      {
+        $lookup: {
+          from: 'usuarios', // El nombre de la colección de usuarios en MongoDB
+          localField: '_id',
+          foreignField: '_id',
+          as: 'infoUsuario',
+        },
+      },
+      // 4. "Desenrollar" el array resultante y limpiar el resultado final
+      {
+        $unwind: '$infoUsuario',
+      },
+      {
+        $project: {
+          _id: 0,
+          usuarioId: '$_id',
+          nombre: '$infoUsuario.nombre',
+          email: '$infoUsuario.email',
+          conteoTareas: '$tareasPorEstado',
+          totalTareas: { $size: '$tareasPorEstado' },
+        },
+      },
+    ]);
+  }
+
   async obtenerReportePorEstado(usuario: Usuario): Promise<any> {
     const reporte = await this.tareaModelo.aggregate([
       {

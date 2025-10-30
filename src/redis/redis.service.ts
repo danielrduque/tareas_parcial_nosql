@@ -51,4 +51,24 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async get(key: string): Promise<string | null> {
     return this.client.get(key);
   }
+
+  /**
+   * Incrementa el contador en la clave de forma atómica y devuelve el nuevo valor.
+   * (Esencial para Rate Limiting)
+   * @param key La clave del contador.
+   * @returns El valor después del incremento.
+   */
+  async incr(key: string): Promise<number> {
+    return this.client.incr(key);
+  }
+
+  /**
+   * Establece un tiempo de expiración (TTL) para una clave.
+   * @param key La clave.
+   * @param ttlSeconds El tiempo de vida en segundos.
+   * @returns 1 si el TTL fue establecido, 0 si la clave no existe o no se pudo establecer.
+   */
+  async expire(key: string, ttlSeconds: number): Promise<number> {
+    return this.client.expire(key, ttlSeconds);
+  }
 }
