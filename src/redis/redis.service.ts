@@ -53,6 +53,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Elimina una clave de Redis.
+   * @param key La clave a eliminar.
+   */
+  async del(key: string): Promise<void> {
+    await this.client.del(key);
+  }
+
+  /**
    * Incrementa el contador en la clave de forma atómica y devuelve el nuevo valor.
    * (Esencial para Rate Limiting)
    * @param key La clave del contador.

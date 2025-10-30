@@ -37,7 +37,8 @@ export class TareasController {
     // Aquí llamarías a un método en tu servicio que busca TODAS las tareas
     // sin filtrar por propietario.
     // return this.tareasService.obtenerTodasLasTareas();
-    return { message: 'Acceso concedido como Administrador' };
+    return this.tareasService.obtenerTodasLasTareasAdmin();
+    //return { message: 'Acceso concedido como Administrador' };
   }
 
   @Get('admin/reporte/actividad-usuarios')

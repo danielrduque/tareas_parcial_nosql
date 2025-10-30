@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -11,24 +12,70 @@ import { Tarea } from './esquemas/tarea.schema';
 import { CrearTareaDto } from './dto/crear-tarea.dto';
 import { ActualizarTareaDto } from './dto/actualizar-tarea.dto';
 import { Usuario } from '../usuarios/esquemas/usuario.schema';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class TareasService {
-  constructor(@InjectModel(Tarea.name) private tareaModelo: Model<Tarea>) {}
+  private readonly logger = new Logger(TareasService.name);
+
+  constructor(
+    @InjectModel(Tarea.name) private tareaModelo: Model<Tarea>,
+    private readonly redisService: RedisService,
+  ) {}
 
   async crear(crearTareaDto: CrearTareaDto, usuario: Usuario): Promise<Tarea> {
     const nuevaTarea = new this.tareaModelo({
       ...crearTareaDto,
       propietario: usuario._id,
     });
-    return nuevaTarea.save();
+    const tareaGuardada = await nuevaTarea.save();
+
+    // Invalidar el caché de la lista de tareas del usuario
+    const cacheKey = `tareas:usuario:${usuario._id}`;
+    await this.redisService.del(cacheKey);
+    this.logger.log(`Cache invalidado para ${cacheKey}`);
+
+    return tareaGuardada;
+  }
+
+  async obtenerTodasLasTareasAdmin(): Promise<Tarea[]> {
+    this.logger.log('Admin: Obteniendo todas las tareas sin filtrar.');
+    return this.tareaModelo.find().exec();
   }
 
   async obtenerTodas(usuario: Usuario): Promise<Tarea[]> {
-    return this.tareaModelo.find({ propietario: usuario._id }).exec();
+    const cacheKey = `tareas:usuario:${usuario._id}`;
+    const cachedTareas = await this.redisService.get(cacheKey);
+
+    if (cachedTareas) {
+      this.logger.log(`Cache hit para ${cacheKey}`);
+      return JSON.parse(cachedTareas);
+    }
+
+    this.logger.log(`Cache miss para ${cacheKey}`);
+    const tareas = await this.tareaModelo
+      .find({ propietario: usuario._id })
+      .exec();
+    await this.redisService.set(cacheKey, JSON.stringify(tareas), 3600); // Cache por 1 hora
+    return tareas;
   }
 
   async obtenerPorId(id: string, usuario: Usuario): Promise<Tarea> {
+    const cacheKey = `tarea:${id}`;
+    const cachedTarea = await this.redisService.get(cacheKey);
+
+    if (cachedTarea) {
+      this.logger.log(`Cache hit para ${cacheKey}`);
+      const tarea = JSON.parse(cachedTarea);
+      if (tarea.propietario.toString() !== usuario._id.toString()) {
+        throw new ForbiddenException(
+          'No tienes permiso para acceder a esta tarea.',
+        );
+      }
+      return tarea;
+    }
+
+    this.logger.log(`Cache miss para ${cacheKey}`);
     const tarea = await this.tareaModelo.findById(id).exec();
     if (!tarea) {
       throw new NotFoundException(
@@ -40,6 +87,8 @@ export class TareasService {
         'No tienes permiso para acceder a esta tarea.',
       );
     }
+
+    await this.redisService.set(cacheKey, JSON.stringify(tarea), 3600); // Cache por 1 hora
     return tarea;
   }
 
@@ -141,12 +190,33 @@ export class TareasService {
   ): Promise<Tarea> {
     const tarea = await this.obtenerPorId(id, usuario); // Reutilizamos para verificar propiedad
     Object.assign(tarea, actualizarTareaDto);
-    return tarea.save();
+    const tareaActualizada = await tarea.save();
+
+    // Invalidar cachés
+    const cacheKeyTarea = `tarea:${id}`;
+    const cacheKeyLista = `tareas:usuario:${usuario._id}`;
+    await this.redisService.del(cacheKeyTarea);
+    await this.redisService.del(cacheKeyLista);
+    this.logger.log(
+      `Caches invalidados para ${cacheKeyTarea} y ${cacheKeyLista}`,
+    );
+
+    return tareaActualizada;
   }
 
   async eliminar(id: string, usuario: Usuario): Promise<{ message: string }> {
     const tarea = await this.obtenerPorId(id, usuario); // Reutilizamos para verificar propiedad
     await this.tareaModelo.deleteOne({ _id: id }).exec();
+
+    // Invalidar cachés
+    const cacheKeyTarea = `tarea:${id}`;
+    const cacheKeyLista = `tareas:usuario:${usuario._id}`;
+    await this.redisService.del(cacheKeyTarea);
+    await this.redisService.del(cacheKeyLista);
+    this.logger.log(
+      `Caches invalidados para ${cacheKeyTarea} y ${cacheKeyLista}`,
+    );
+
     return { message: 'Tarea eliminada exitosamente.' };
   }
 }
