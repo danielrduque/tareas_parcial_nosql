@@ -4,16 +4,14 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
-  Inject,
   Logger,
 } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 
+import { RedisService } from '../redis/redis.service'; // 👈 Importa tu servicio
 import { Usuario } from '../usuarios/esquemas/usuario.schema';
 import { RegistroAuthDto } from './dto/registro-auth.dto';
 import { LoginAuthDto } from './dto/login-auth.dto';
@@ -25,7 +23,7 @@ export class AuthService {
   constructor(
     @InjectModel(Usuario.name) private usuarioModelo: Model<Usuario>,
     private jwtService: JwtService,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private redisService: RedisService, // 👈 Inyecta RedisService aquí
   ) {}
 
   async registrar(
@@ -81,24 +79,22 @@ export class AuthService {
   async logout(token: string): Promise<{ message: string }> {
     const payload: any = this.jwtService.decode(token);
     if (payload && payload.exp) {
-      const tiempoRestanteMs = payload.exp * 1000 - Date.now();
-      if (tiempoRestanteMs > 0) {
-        this.logger.log(`Añadiendo token a la blacklist en Redis...`);
-        this.logger.debug(`Clave: blacklist:${token}`);
-        this.logger.debug(`TTL (ms): ${tiempoRestanteMs}`);
+      const tiempoRestanteSegundos =
+        payload.exp - Math.floor(Date.now() / 1000);
 
-        try {
-          await this.cacheManager.set(
-            `blacklist:${token}`,
-            true,
-            tiempoRestanteMs,
-          );
-          const test = await this.cacheManager.get(`blacklist:${token}`);
-          this.logger.debug(`Valor leído desde Redis: ${test}`);
-          this.logger.log('✅ Token añadido a la blacklist exitosamente.');
-        } catch (error) {
-          this.logger.error('❌ Error al intentar guardar en Redis:', error);
-        }
+      if (tiempoRestanteSegundos > 0) {
+        this.logger.log(
+          `Añadiendo token a la blacklist con ioredis (TTL: ${tiempoRestanteSegundos}s)`,
+        );
+
+        // --- 👇 Usa tu nuevo servicio para guardar en Redis 👇 ---
+        await this.redisService.set(
+          `blacklist:${token}`,
+          'true',
+          tiempoRestanteSegundos,
+        );
+
+        this.logger.log('✅ Token añadido a la blacklist exitosamente.');
       }
     }
     return { message: 'Sesión cerrada exitosamente.' };

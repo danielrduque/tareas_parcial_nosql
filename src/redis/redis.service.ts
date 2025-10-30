@@ -1,35 +1,54 @@
 // src/redis/redis.service.ts
 
-import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+import {
+  Injectable,
+  OnModuleInit,
+  OnModuleDestroy,
+  Logger,
+} from '@nestjs/common';
+import Redis from 'ioredis';
 
 @Injectable()
-export class RedisService implements OnModuleInit {
+export class RedisService implements OnModuleInit, OnModuleDestroy {
+  private client: Redis;
   private readonly logger = new Logger(RedisService.name);
 
-  // Inyectamos el gestor de caché
-  constructor(@Inject(CACHE_MANAGER) private cacheManager: Cache) {}
+  onModuleInit() {
+    this.client = new Redis({
+      host: process.env.REDIS_HOST,
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+    });
 
-  async onModuleInit() {
-    // Intentamos establecer un valor para verificar la conexión
-    try {
-      await this.cacheManager.set('redis_check', Date.now(), 5000); // 5 segundos TTL
-      this.logger.log('✅ Conexión a Redis exitosa.'); // Requisito 9
-    } catch (error) {
-      this.logger.error(
-        '❌ Fallo la conexión a Redis. Asegúrate de que esté corriendo.',
-        error.message,
-      );
-      // Opcional: podrías lanzar un error fatal aquí si la conexión a Redis es obligatoria
-      // throw new Error('No se pudo conectar a Redis.');
-    }
+    this.client.on('connect', () => {
+      this.logger.log('✅ Conectado a Redis exitosamente usando ioredis.');
+    });
+
+    this.client.on('error', (error) => {
+      this.logger.error('❌ Error de conexión con Redis:', error);
+    });
   }
 
-  // Aquí podrías agregar métodos de utilidad para Redis (get, set, del)
-  async get(key: string): Promise<any> {
-    return this.cacheManager.get(key);
+  onModuleDestroy() {
+    this.client.quit();
+    this.logger.log('Desconectado de Redis.');
   }
 
-  // ... otros métodos
+  /**
+   * Guarda un valor en Redis con un tiempo de vida (TTL).
+   * @param key La clave.
+   * @param value El valor.
+   * @param ttlSeconds El tiempo de vida en segundos.
+   */
+  async set(key: string, value: string, ttlSeconds: number): Promise<void> {
+    await this.client.set(key, value, 'EX', ttlSeconds);
+  }
+
+  /**
+   * Obtiene un valor de Redis.
+   * @param key La clave a buscar.
+   * @returns El valor si existe, o null si no.
+   */
+  async get(key: string): Promise<string | null> {
+    return this.client.get(key);
+  }
 }

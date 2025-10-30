@@ -1,11 +1,11 @@
 // src/redis/redis.module.ts
-import { Module } from '@nestjs/common';
-import { CacheModule } from '@nestjs/cache-manager';
+
+import { Module, Global } from '@nestjs/common';
 import { RedisService } from './redis.service';
 
+@Global() // @Global hace el servicio disponible en toda la aplicación
 @Module({
-  imports: [CacheModule.register()], // 👈 importa el CacheModule
   providers: [RedisService],
-  exports: [RedisService],
+  exports: [RedisService], // Exporta el servicio para que otros módulos puedan usarlo
 })
 export class RedisModule {}
